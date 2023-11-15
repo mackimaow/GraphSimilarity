@@ -50,7 +50,21 @@ class Graph(tp.Generic[N, E]):
     @property
     def nodes(self) -> tp.Tuple:
         return tuple(self.__nodes.values())
-       
+    
+    def get_node(
+        self,
+        node_index: int
+    ) -> N:
+        return self.__nodes[node_index]
+    
+    def num_neigbbors(
+        self,
+        node_index: int
+    ) -> int:
+        return len(
+            self.__edges[node_index]
+        )
+    
     def neighbors(
         self,
         node_index: int

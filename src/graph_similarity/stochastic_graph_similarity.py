@@ -12,7 +12,8 @@ E1 = tp.TypeVar("E1")
 
 Output = tp.TypeVar("Output")
 Characteristic = tp.TypeVar("Characteristic")
-class StochasticGraphSimiliarity(tp.Generic[N, E, N1, E1, Characteristic, Output]):
+MergedDisjoints = tp.TypeVar("MergedDisjoints")
+class StochasticGraphSimiliarity(tp.Generic[N, E, N1, E1, MergedDisjoints, Characteristic, Output]):
     
     def __init__(
         self,
@@ -20,7 +21,8 @@ class StochasticGraphSimiliarity(tp.Generic[N, E, N1, E1, Characteristic, Output
         initialize_edges: tp.Callable[[int, int, tp.Tuple[N, N1], tp.Tuple[N, N1], E], E1],
         merge_node: tp.Callable[[int, int, N1, N1, E1], N1],
         merge_edge: tp.Callable[[int, int, N1, tp.Tuple[N1, E1], tp.Tuple[N1, E1], E1, N1], E1],
-        calc_characteristic: tp.Callable[[int, int, N1], Characteristic],
+        merge_disjoint_graph_nodes: tp.Callable[[int, int, tp.List[tp.Tuple[int, N1]]], MergedDisjoints],
+        calc_characteristic: tp.Callable[[int, int, MergedDisjoints], Characteristic],
         average_characteristic: tp.Callable[[tp.List[Characteristic]], Characteristic],
         compare_characteristic: tp.Callable[[tp.List[Characteristic],tp.List[Characteristic]], Output],
         empty_graph_characteristic: Characteristic
@@ -51,11 +53,14 @@ class StochasticGraphSimiliarity(tp.Generic[N, E, N1, E1, Characteristic, Output
             number_of_characteristics: int
         ) -> tp.Callable[[N1, tp.Tuple[N1, E1], tp.Tuple[N1, E1], E1, N1], E1]:
             return lambda v, w, x, y, z: merge_edge(characteristic, number_of_characteristics, v, w, x, y, z)
+        
+        self.__merge_disjoint_graph_nodes = merge_disjoint_graph_nodes
+        
         self.__merge_edge = wrap_merge_edge
         def wrap_calc_characteristic(
             characteristic: int,
             number_of_characteristics: int
-        ) -> tp.Callable[[N1], Characteristic]:
+        ) -> tp.Callable[[MergedDisjoints], Characteristic]:
             return lambda x: calc_characteristic(characteristic, number_of_characteristics, x)
         self.__calc_characteristic = wrap_calc_characteristic
         self.__average_characteristic = average_characteristic
@@ -145,7 +150,9 @@ class StochasticGraphSimiliarity(tp.Generic[N, E, N1, E1, Characteristic, Output
             i: 1 for i in range(num_nodes)
         }
         
-        while aug_graph.num_nodes() > 1:
+        disjoint_nodes: tp.List[tp.Tuple[int, N1]] = []
+        
+        while aug_graph.num_nodes() > 0:
             lowest_merge_number = min(node_merge_numbers.values())
             nodes_with_lowest_merge_number = [
                 i
@@ -155,16 +162,20 @@ class StochasticGraphSimiliarity(tp.Generic[N, E, N1, E1, Characteristic, Output
             selected_node_1_rel_index = rand.randint(0, len(nodes_with_lowest_merge_number) - 1)
             node_index_1 = nodes_with_lowest_merge_number[selected_node_1_rel_index]
             
+            if aug_graph.num_neigbbors(node_index_1) == 0:
+                disjoint_nodes.append(
+                    (node_merge_numbers[node_index_1], aug_graph.get_node(node_index_1))
+                )
+                del node_merge_numbers[node_index_1]
+                del aug_graph[node_index_1]
+                continue
+            
             node_1_neighbors = aug_graph.neighbors(node_index_1)
             neighbor_merge_numbers = {
                 node_merge_numbers[neighbor_index]
                 for neighbor_index in node_1_neighbors
             }
-            if len(neighbor_merge_numbers) == 0:
-                raise ValueError(
-                    "This graph has islands (nodes that cannot ever reach other nodes by traveling along edges)."
-                    "Because of this, the graph cannot be processed for similiarity."
-                )
+            
             lowest_neighbor_merge_number = min(neighbor_merge_numbers)
             neighbors_with_lowest_merge_number = [
                 i
@@ -181,4 +192,11 @@ class StochasticGraphSimiliarity(tp.Generic[N, E, N1, E1, Characteristic, Output
             )
             del node_merge_numbers[node_index_2]
             node_merge_numbers[node_index_1] = lowest_merge_number + lowest_neighbor_merge_number
-        return self.__calc_characteristic(characteristic, number_of_characteristics)(aug_graph.nodes[0])
+        
+        merged_disjoints = self.__merge_disjoint_graph_nodes(
+            characteristic,
+            number_of_characteristics,
+            disjoint_nodes
+        )
+        
+        return self.__calc_characteristic(characteristic, number_of_characteristics)(merged_disjoints)
