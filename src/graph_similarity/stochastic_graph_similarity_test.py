@@ -144,6 +144,33 @@ def test_stochastic_graph_similiarity_on_chemical_compounds():
             (3, 17): 1,
         }
     )
+
+    # same as graph 1 but linearized (each node has at most two edges)
+    graph_6 = Graph[Atom, BOND_LENGTH].create(
+        (
+            *[Atom.VANADIUM] * 4,  # 0 - 3
+            *[Atom.OXYGEN] * 14  # 4 - 17
+        ),
+        {
+            (0, 4): 1,  # everything has a bond length of 1
+            (4, 5): 1,
+            (5, 6): 1,
+            (6, 7): 1,
+            (7, 1): 1,
+            (1, 8): 1,
+            (8, 9): 1,
+            (9, 10): 1,
+            (10, 2): 1,
+            (2, 11): 1,
+            (11, 12): 1,
+            (12, 13): 1,
+            (13, 14): 1,
+            (14, 3): 1,
+            (3, 15): 1,
+            (15, 16): 1,
+            (16, 17): 1,
+        }
+    )
     
     
     # ---- making similiarity metric ----
@@ -248,15 +275,17 @@ def test_stochastic_graph_similiarity_on_chemical_compounds():
             -(cmath.pi * 1j) * (1.0 * n / num_characteristics)
         )
         
-        new_value = cmath.sqrt(
+        merged_edge_value = cmath.sqrt(
             edge_b_1_value * edge_1_weight
             + edge_b_2_value * edge_2_weight
         )
         
-        return (
-            new_value,
+        merged_edge = (
+            merged_edge_value,
             num_cyles_1 + num_cyles_2
         )
+    
+        return merged_edge
     
     # The case where the input graph is composed of two or more disjoint graphs,
     # one needs to reduce the final merged node of each disjoint graph. This is 
@@ -352,27 +381,35 @@ def test_stochastic_graph_similiarity_on_chemical_compounds():
     
     # test 5: run on graph 5 twice (hopefully its zero):
     similiarity = metric.compare(graph_5, graph_5) 
-    print(f"Simliarity metric on graph5 on itself: {similiarity}")    
+    print(f"Simliarity metric on graph5 on itself: {similiarity}")
     
-    # test 6: run on the graph 1 and 2:
+    # test 6: run on graph 6 twice (hopefully its zero):
+    similiarity = metric.compare(graph_6, graph_6) 
+    print(f"Simliarity metric on graph6 on itself: {similiarity}")
+    
+    # test 7: run on the graph 1 and 2:
     similiarity = metric.compare(graph_1, graph_2) 
     print(f"Simliarity metric on graph1 on graph2: {similiarity}")
     
-    # test 7: run on the graph 1 and 3:
+    # test 8: run on the graph 1 and 3:
     similiarity = metric.compare(graph_1, graph_3) 
     print(f"Simliarity metric on graph1 on graph3: {similiarity}")
     
-    # test 8: run on the graph 2 and 3:
+    # test 9: run on the graph 2 and 3:
     similiarity = metric.compare(graph_2, graph_3) 
     print(f"Simliarity metric on graph2 on graph3: {similiarity}")
     
-    # test 9: run on the graph 1 and 4:
+    # test 10: run on the graph 1 and 4:
     similiarity = metric.compare(graph_1, graph_4) 
     print(f"Simliarity metric on graph1 on graph4: {similiarity}")
     
-    # test 10: run on the graph 1 and 5:
+    # test 11: run on the graph 1 and 5:
     similiarity = metric.compare(graph_1, graph_5) 
-    print(f"Simliarity metric on graph1 on graph5: {similiarity}")    
+    print(f"Simliarity metric on graph1 on graph5: {similiarity}")
+    
+    # test 12: run on the graph 1 and 6:
+    similiarity = metric.compare(graph_1, graph_6) 
+    print(f"Simliarity metric on graph1 on graph6: {similiarity}")    
 
 if __name__ == "__main__":
     test_stochastic_graph_similiarity_on_chemical_compounds()
