@@ -172,6 +172,58 @@ def test_stochastic_graph_similiarity_on_chemical_compounds():
         }
     )
     
+    # same as graph 1 but everything is oxygen
+    graph_7 = Graph[Atom, BOND_LENGTH].create(
+        tuple(
+            [Atom.OXYGEN] * 18  # 0 - 17
+        ),
+        {
+            (0, 4): 1,  # everything has a bond length of 1
+            (0, 5): 1,
+            (0, 6): 1,
+            (0, 7): 1,
+            (1, 7): 1,
+            (1, 8): 1,
+            (1, 9): 1,
+            (1, 10): 1,
+            (2, 10): 1,
+            (2, 11): 1,
+            (2, 12): 1,
+            (2, 13): 1,
+            (2, 14): 1,
+            (3, 14): 1,
+            (3, 15): 1,
+            (3, 16): 1,
+            (3, 17): 1,
+        }
+    )
+    
+    # same as graph 1 but everything is vanadium
+    graph_8 = Graph[Atom, BOND_LENGTH].create(
+        tuple(
+            [Atom.VANADIUM] * 18  # 0 - 17
+        ),
+        {
+            (0, 4): 1,  # everything has a bond length of 1
+            (0, 5): 1,
+            (0, 6): 1,
+            (0, 7): 1,
+            (1, 7): 1,
+            (1, 8): 1,
+            (1, 9): 1,
+            (1, 10): 1,
+            (2, 10): 1,
+            (2, 11): 1,
+            (2, 12): 1,
+            (2, 13): 1,
+            (2, 14): 1,
+            (3, 14): 1,
+            (3, 15): 1,
+            (3, 16): 1,
+            (3, 17): 1,
+        }
+    )
+    
     
     # ---- making similiarity metric ----
     
@@ -363,53 +415,86 @@ def test_stochastic_graph_similiarity_on_chemical_compounds():
         EMPTY_GRAPH_CHARACTERISTIC_VALUE
     )
     
+    import math
+    
+    # gets rid of non-zero offset due to accumulated error
+    def zero_base_compare(
+        metric: StochasticGraphSimiliarity,
+        graph_1: Graph,
+        graph_2: Graph,
+    ) -> float:
+        graph_1_on_1 = metric.compare(graph_1, graph_1)
+        graph_2_on_2 = metric.compare(graph_2, graph_2)
+        graph_1_on_2 = metric.compare(graph_1, graph_2)
+        
+        return math.sqrt(
+            (graph_1_on_1 - graph_1_on_2) ** 2
+            + (graph_2_on_2 - graph_1_on_2) ** 2
+        ) / 2
+    
     # test 1: run on graph 1 twice (hopefully its zero):
-    similiarity = metric.compare(graph_1, graph_1) 
+    similiarity = zero_base_compare(metric, graph_1, graph_1) 
     print(f"Simliarity metric on graph1 on itself: {similiarity}")
     
     # test 2: run on graph 2 twice (hopefully its zero):
-    similiarity = metric.compare(graph_2, graph_2) 
+    similiarity = zero_base_compare(metric, graph_2, graph_2) 
     print(f"Simliarity metric on graph2 on itself: {similiarity}")
     
     # test 3: run on graph 3 twice (hopefully its zero):
-    similiarity = metric.compare(graph_3, graph_3) 
+    similiarity = zero_base_compare(metric, graph_3, graph_3) 
     print(f"Simliarity metric on graph3 on itself: {similiarity}")
 
     # test 4: run on graph 4 twice (hopefully its zero):
-    similiarity = metric.compare(graph_4, graph_4) 
+    similiarity = zero_base_compare(metric, graph_4, graph_4) 
     print(f"Simliarity metric on graph4 on itself: {similiarity}")
     
     # test 5: run on graph 5 twice (hopefully its zero):
-    similiarity = metric.compare(graph_5, graph_5) 
+    similiarity = zero_base_compare(metric, graph_5, graph_5) 
     print(f"Simliarity metric on graph5 on itself: {similiarity}")
     
     # test 6: run on graph 6 twice (hopefully its zero):
-    similiarity = metric.compare(graph_6, graph_6) 
+    similiarity = zero_base_compare(metric, graph_6, graph_6) 
     print(f"Simliarity metric on graph6 on itself: {similiarity}")
     
-    # test 7: run on the graph 1 and 2:
-    similiarity = metric.compare(graph_1, graph_2) 
+    # test 7: run on graph 7 twice (hopefully its zero):
+    similiarity = zero_base_compare(metric, graph_7, graph_7) 
+    print(f"Simliarity metric on graph7 on itself: {similiarity}")
+    
+    # test 8: run on graph 8 twice (hopefully its zero):
+    similiarity = zero_base_compare(metric, graph_8, graph_8) 
+    print(f"Simliarity metric on graph8 on itself: {similiarity}")
+    
+    # test 9: run on the graph 1 and 2:
+    similiarity = zero_base_compare(metric, graph_1, graph_2) 
     print(f"Simliarity metric on graph1 on graph2: {similiarity}")
     
-    # test 8: run on the graph 1 and 3:
-    similiarity = metric.compare(graph_1, graph_3) 
+    # test 10: run on the graph 1 and 3:
+    similiarity = zero_base_compare(metric, graph_1, graph_3) 
     print(f"Simliarity metric on graph1 on graph3: {similiarity}")
     
-    # test 9: run on the graph 2 and 3:
-    similiarity = metric.compare(graph_2, graph_3) 
+    # test 11: run on the graph 2 and 3:
+    similiarity = zero_base_compare(metric, graph_2, graph_3) 
     print(f"Simliarity metric on graph2 on graph3: {similiarity}")
     
-    # test 10: run on the graph 1 and 4:
-    similiarity = metric.compare(graph_1, graph_4) 
+    # test 12: run on the graph 1 and 4:
+    similiarity = zero_base_compare(metric, graph_1, graph_4) 
     print(f"Simliarity metric on graph1 on graph4: {similiarity}")
     
-    # test 11: run on the graph 1 and 5:
-    similiarity = metric.compare(graph_1, graph_5) 
+    # test 13: run on the graph 1 and 5:
+    similiarity = zero_base_compare(metric, graph_1, graph_5) 
     print(f"Simliarity metric on graph1 on graph5: {similiarity}")
     
-    # test 12: run on the graph 1 and 6:
-    similiarity = metric.compare(graph_1, graph_6) 
-    print(f"Simliarity metric on graph1 on graph6: {similiarity}")    
+    # test 14: run on the graph 1 and 6:
+    similiarity = zero_base_compare(metric, graph_1, graph_6) 
+    print(f"Simliarity metric on graph1 on graph6: {similiarity}")  
+      
+    # test 15: run on the graph 1 and 7:
+    similiarity = zero_base_compare(metric, graph_1, graph_7) 
+    print(f"Simliarity metric on graph1 on graph7: {similiarity}")  
+    
+    # test 16: run on the graph 1 and 8:
+    similiarity = zero_base_compare(metric, graph_1, graph_8) 
+    print(f"Simliarity metric on graph1 on graph8: {similiarity}")  
 
 if __name__ == "__main__":
     test_stochastic_graph_similiarity_on_chemical_compounds()
