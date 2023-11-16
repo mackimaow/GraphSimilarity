@@ -9,46 +9,59 @@ class Graph(tp.Generic[N, E]):
     @classmethod
     def create(
         cls,
-        nodes: tp.Tuple[N, ...],
+        nodes: tp.Union[
+            tp.Iterable[N],
+            tp.Dict[int, N]
+        ],
         edges: tp.Dict[tp.Tuple[int, int], E]
-    ):
-        node_ids = set(range(len(nodes)))
-        node_dict = {
-            node_id: node
-            for node_id, node in enumerate(nodes)
-        }
-        edge_dict = {
-            node1: {
-                node2: 
-                    edges[(node1, node2)] 
-                    if (node1, node2) in edges
-                    else edges[(node2, node1)]
-                for node2 in node_ids
-                if ((node1, node2) in edges or (node2, node1) in edges) and node1 != node2
+    ) -> "Graph[N, E]":
+        if isinstance(nodes, dict):
+            nodes_dict: tp.Dict[int, N] = nodes  # type: ignore
+        else:
+            nodes_dict: tp.Dict[int, N] = {
+                node_id: node
+                for node_id, node in enumerate(nodes)
             }
-            for node1 in node_ids
+        edge_dict = {
+            node_1_index: {
+                node_2_index: 
+                    edges[(node_1_index, node_2_index)] 
+                    if (node_1_index, node_2_index) in edges
+                    else edges[(node_2_index, node_1_index)]
+                for node_2_index in nodes_dict
+                if (
+                    (
+                        (node_1_index, node_2_index) in edges
+                        or (node_2_index, node_1_index) in edges
+                    )
+                    and node_1_index != node_2_index
+                )
+            }
+            for node_1_index in nodes_dict
         }
+        
         return Graph(
-            node_ids,
-            node_dict,
+            nodes_dict,
             edge_dict
         )
     
     def __init__(
         self,
-        node_ids: tp.Set[int],
         nodes: tp.Dict[int, N],
         edges:  tp.Dict[int, tp.Dict[int, E]],
     ):
-        self.__node_ids = node_ids
         self.__nodes = nodes
         self.__edges = edges
     
     def num_nodes(self) -> int:
-        return len(self.__node_ids)
+        return len(self.__nodes)
     
     @property
-    def nodes(self) -> tp.Tuple:
+    def node_ids(self) -> tp.Set[int]:
+        return set(self.__nodes)
+    
+    @property
+    def nodes(self) -> tp.Tuple[N, ...]:
         return tuple(self.__nodes.values())
     
     def copy_edges(self) -> tp.Dict[int, tp.Dict[int, E]]:
@@ -102,7 +115,7 @@ class Graph(tp.Generic[N, E]):
                     node_map(self.__nodes[x])
                 )
             ),
-            self.__node_ids
+            self.__nodes
         ))
         new_edges = {
             node_index_1: {
@@ -112,20 +125,17 @@ class Graph(tp.Generic[N, E]):
             }
             for (node_index_1, n_1) in node_transistion
         }
-        new_node_ids = set(self.__node_ids)
         new_nodes = {
             id_: new
             for id_, (_, new) in node_transistion
         }
         return Graph(
-            new_node_ids,
             new_nodes,
             new_edges
         )
 
     def __delitem__(self, node_index: int):
         del self.__nodes[node_index]
-        self.__node_ids.remove(node_index)
         del self.__edges[node_index]
         for node_edges in self.__edges.values():
             if node_index in node_edges: 
@@ -181,7 +191,7 @@ class Graph(tp.Generic[N, E]):
     def __repr__(self) -> str:
         class_name = type(self).__name__
         return (
-            f'{class_name}(node_ids={self.__node_ids}, nodes={self.__nodes}, edges={self.__edges})'
+            f'{class_name}(nodes={self.__nodes}, edges={self.__edges})'
         )
     
     def pretty_string_print_graph(

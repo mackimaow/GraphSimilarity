@@ -187,7 +187,7 @@ class StochasticGraphSimiliarity(tp.Generic[N, E, N1, E1, MergedDisjoints, Chara
             return self.__empty_graph_characteristic
         
         node_merge_numbers = {
-            i: 1 for i in range(num_nodes)
+            i: 1 for i in aug_graph.node_ids
         }
         
         disjoint_nodes: tp.List[tp.Tuple[int, N1]] = []
