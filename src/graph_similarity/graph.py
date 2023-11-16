@@ -51,6 +51,15 @@ class Graph(tp.Generic[N, E]):
     def nodes(self) -> tp.Tuple:
         return tuple(self.__nodes.values())
     
+    def copy_edges(self) -> tp.Dict[int, tp.Dict[int, E]]:
+        return {
+            node_index: {
+                adjacent_node: edge
+                for adjacent_node, edge in adjacent_nodes.items()
+            }
+            for node_index, adjacent_nodes in self.__edges.items()
+        }
+    
     def get_node(
         self,
         node_index: int
@@ -162,3 +171,53 @@ class Graph(tp.Generic[N, E]):
         for node_2_neighbor, edge in unique_edges_from_node_2.items():
             self.__edges[node_2_neighbor][node_index_1] = edge
             self.__edges[node_index_1][node_2_neighbor] = edge
+
+    def __repr__(self) -> str:
+        class_name = type(self).__name__
+        return (
+            f'{class_name}(node_ids={self.__node_ids}, nodes={self.__nodes}, edges={self.__edges})'
+        )
+    
+    def pretty_string_print_graph(
+        self
+    ) -> str:
+        class_name = type(self).__name__
+        nodes_components_str = "\n".join(
+            f'    {node_index}: {node}'
+            for node_index, node in self.__nodes.items()
+        )
+        
+        if len(self.__nodes) == 0:
+            nodes_str = '  nodes={}'
+        else:
+            nodes_str = (
+                f'  nodes={{\n'
+                f'{nodes_components_str}\n'
+                f'  }}'
+            )
+        
+        edge_components_str = "\n".join(
+            f'    {node_index_1} - {node_index_2}: {edge}'
+            for node_index_1, adjacent_nodes in self.__edges.items()
+            for node_index_2, edge in adjacent_nodes.items()
+        )
+        
+        if len(self.__edges) == 0:
+            edges_str = '  edges={}'
+        else:
+            edges_str = (
+                f'  edges={{\n'
+                f'{edge_components_str}\n'
+                f'  }}'
+            )
+        
+        if len(self.__nodes) == 0 and len(self.__edges) == 0:
+            final_str = f'{class_name}(nodes={{}}, edges={{}})'
+        else:
+            final_str = "\n".join((
+                f'{class_name}(',
+                nodes_str,
+                edges_str,
+                f')'
+            ))
+        return final_str

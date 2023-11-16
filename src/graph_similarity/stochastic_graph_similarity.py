@@ -73,10 +73,10 @@ class StochasticGraphSimiliarity(tp.Generic[N, E, N1, E1, MergedDisjoints, Chara
         graph_2: Graph[N, E],
         num_samples: int = 30
     ) -> Output:
-        graph_1_size = graph_1.num_nodes()
-        graph_2_size = graph_2.num_nodes()
-        
-        num_characteristics = (max([graph_1_size, graph_2_size])) ** 2
+        num_characteristics = self.number_of_characteristics_needed_for_comparison(
+            graph_1,
+            graph_2
+        )
         average_characteristics_graph_1 = self.__compute_average_characteristics(
             graph_1,
             num_characteristics,
@@ -90,6 +90,46 @@ class StochasticGraphSimiliarity(tp.Generic[N, E, N1, E1, MergedDisjoints, Chara
         return self.__compare_characteristic(
             average_characteristics_graph_1,
             average_characteristics_graph_2
+        )
+    
+    def compare_characteristics(
+        self,
+        graph_1_characteristics: tp.List[Characteristic],
+        graph_2_characteristics: tp.List[Characteristic]
+    ) -> Output:
+        num_1_chars = len(graph_1_characteristics)
+        num_2_chars = len(graph_2_characteristics)
+        if num_1_chars != num_2_chars:
+            raise ValueError(
+                f'Cannot compare two graph characteristics of different lengths {num_1_chars} and {num_2_chars}.'
+            )
+
+        return self.__compare_characteristic(
+            graph_1_characteristics,
+            graph_2_characteristics
+        )
+    
+    def number_of_characteristics_needed_for_comparison(
+        self,
+        graph_1: Graph[N,E],
+        graph_2: Graph[N,E],
+    ) -> int:
+        graph_1_size = graph_1.num_nodes()
+        graph_2_size = graph_2.num_nodes()
+        
+        num_characteristics = (max([graph_1_size, graph_2_size])) ** 2
+        return num_characteristics
+        
+    def compute_graph_characteristics(
+        self,
+        graph: Graph[N,E],
+        num_characteristics: int,
+        samples: int = 30  
+    ) -> tp.List[Characteristic]:
+        return self.__compute_average_characteristics(
+            graph,
+            num_characteristics,
+            samples
         )
         
     def __compute_average_characteristics(

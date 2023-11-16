@@ -39,7 +39,7 @@ def test_stochastic_graph_similiarity_on_chemical_compounds():
             (3, 17): 1,
         }
     )
-    
+
     # same graph as above but changed the last oxygen to vanadium
     graph_2 = Graph[Atom, BOND_LENGTH].create(
         (
@@ -224,6 +224,33 @@ def test_stochastic_graph_similiarity_on_chemical_compounds():
         }
     )
     
+    # same as graph 1 except 1 vanadium atom switches places with 1 oxygen
+    graph_9 = Graph[Atom, BOND_LENGTH].create(
+        (
+            *[Atom.VANADIUM] * 4,  # 0 - 3
+            *[Atom.OXYGEN] * 14  # 4 - 17
+        ),
+        {
+            (12, 4): 1,  # everything has a bond length of 1
+            (12, 5): 1,
+            (12, 6): 1,
+            (12, 7): 1,
+            (1, 7): 1,
+            (1, 8): 1,
+            (1, 9): 1,
+            (1, 10): 1,
+            (2, 10): 1,
+            (2, 11): 1,
+            (2, 0): 1,  # switched vandanium 0 with oxygen 12
+            (2, 13): 1,
+            (2, 14): 1,
+            (3, 14): 1,
+            (3, 15): 1,
+            (3, 16): 1,
+            (3, 17): 1,
+        }
+    )
+    
     
     # ---- making similiarity metric ----
     
@@ -390,7 +417,7 @@ def test_stochastic_graph_similiarity_on_chemical_compounds():
         characteristic_values_graph_2: tp.List[CharacteristicType]
     ) -> FinalOutput:
         return abs(cmath.sqrt(sum(
-            (char_1 - char_2) ** 2
+            (char_1 - char_2)**2
             for char_1, char_2 in zip(
                 characteristic_values_graph_1,
                 characteristic_values_graph_2
@@ -417,84 +444,155 @@ def test_stochastic_graph_similiarity_on_chemical_compounds():
     
     import math
     
+    def regular_compare(
+        metric: StochasticGraphSimiliarity,
+        graph_1: Graph,
+        graph_2: Graph,
+        num_samples: int = 30
+    ) -> float:
+        return metric.compare(graph_1, graph_2, num_samples)
+    
     # gets rid of non-zero offset due to accumulated error
     def zero_base_compare(
         metric: StochasticGraphSimiliarity,
         graph_1: Graph,
         graph_2: Graph,
+        num_samples: int = 30
     ) -> float:
-        graph_1_on_1 = metric.compare(graph_1, graph_1)
-        graph_2_on_2 = metric.compare(graph_2, graph_2)
-        graph_1_on_2 = metric.compare(graph_1, graph_2)
+        
+        graph_1_on_1 = metric.compare(graph_1, graph_1, num_samples)
+        graph_2_on_2 = metric.compare(graph_2, graph_2, num_samples)
+        graph_1_on_2 = metric.compare(graph_1, graph_2, num_samples)
         
         return math.sqrt(
             (graph_1_on_1 - graph_1_on_2) ** 2
             + (graph_2_on_2 - graph_1_on_2) ** 2
         ) / 2
     
-    # test 1: run on graph 1 twice (hopefully its zero):
-    similiarity = zero_base_compare(metric, graph_1, graph_1) 
-    print(f"Simliarity metric on graph1 on itself: {similiarity}")
+    # faster version of zero_base_compare
+    def zero_base_compare_efficient(
+        metric: StochasticGraphSimiliarity,
+        graph_1: Graph,
+        graph_2: Graph,
+        num_samples: int = 30
+    ) -> float:
+        num_characteristics = metric.number_of_characteristics_needed_for_comparison(
+            graph_1,
+            graph_2
+        )
+        graph_1_characteristics_1 = metric.compute_graph_characteristics(
+            graph_1,
+            num_characteristics,
+            num_samples
+        )
+        graph_1_characteristics_2 = metric.compute_graph_characteristics(
+            graph_1,
+            num_characteristics,
+            num_samples
+        )
+        graph_2_characteristics_1 = metric.compute_graph_characteristics(
+            graph_2,
+            num_characteristics,
+            num_samples
+        )
+        graph_2_characteristics_2 = metric.compute_graph_characteristics(
+            graph_2,
+            num_characteristics,
+            num_samples
+        )
+        graph_1_on_1 = metric.compare_characteristics(
+            graph_1_characteristics_1,
+            graph_1_characteristics_2
+        )
+        graph_2_on_2 = metric.compare_characteristics(
+            graph_2_characteristics_1,
+            graph_2_characteristics_2
+        )
+        graph_1_on_2 = metric.compare_characteristics(
+            graph_1_characteristics_1,
+            graph_2_characteristics_2
+        )
+        
+        return math.sqrt(
+            (graph_1_on_1 - graph_1_on_2) ** 2
+            + (graph_2_on_2 - graph_1_on_2) ** 2
+        ) / 2
+        
     
-    # test 2: run on graph 2 twice (hopefully its zero):
-    similiarity = zero_base_compare(metric, graph_2, graph_2) 
-    print(f"Simliarity metric on graph2 on itself: {similiarity}")
+    NUM_SAMPLES = 30
+    compare = zero_base_compare_efficient
     
-    # test 3: run on graph 3 twice (hopefully its zero):
-    similiarity = zero_base_compare(metric, graph_3, graph_3) 
-    print(f"Simliarity metric on graph3 on itself: {similiarity}")
+    # run on graph 1 twice (hopefully its zero):
+    similiarity = compare(metric, graph_1, graph_1, NUM_SAMPLES) 
+    print(f"Simliarity metric between graph1 & itself: {similiarity}")
+    
+    # run on graph 2 twice (hopefully its zero):
+    similiarity = compare(metric, graph_2, graph_2, NUM_SAMPLES) 
+    print(f"Simliarity metric between graph2 & itself: {similiarity}")
+    
+    # run on graph 3 twice (hopefully its zero):
+    similiarity = compare(metric, graph_3, graph_3, NUM_SAMPLES) 
+    print(f"Simliarity metric between graph3 & itself: {similiarity}")
 
-    # test 4: run on graph 4 twice (hopefully its zero):
-    similiarity = zero_base_compare(metric, graph_4, graph_4) 
-    print(f"Simliarity metric on graph4 on itself: {similiarity}")
+    # run on graph 4 twice (hopefully its zero):
+    similiarity = compare(metric, graph_4, graph_4, NUM_SAMPLES) 
+    print(f"Simliarity metric between graph4 & itself: {similiarity}")
     
-    # test 5: run on graph 5 twice (hopefully its zero):
-    similiarity = zero_base_compare(metric, graph_5, graph_5) 
-    print(f"Simliarity metric on graph5 on itself: {similiarity}")
+    # run on graph 5 twice (hopefully its zero):
+    similiarity = compare(metric, graph_5, graph_5, NUM_SAMPLES) 
+    print(f"Simliarity metric between graph5 & itself: {similiarity}")
     
-    # test 6: run on graph 6 twice (hopefully its zero):
-    similiarity = zero_base_compare(metric, graph_6, graph_6) 
-    print(f"Simliarity metric on graph6 on itself: {similiarity}")
+    # run on graph 6 twice (hopefully its zero):
+    similiarity = compare(metric, graph_6, graph_6, NUM_SAMPLES) 
+    print(f"Simliarity metric between graph6 & itself: {similiarity}")
     
-    # test 7: run on graph 7 twice (hopefully its zero):
-    similiarity = zero_base_compare(metric, graph_7, graph_7) 
-    print(f"Simliarity metric on graph7 on itself: {similiarity}")
+    # run on graph 7 twice (hopefully its zero):
+    similiarity = compare(metric, graph_7, graph_7, NUM_SAMPLES) 
+    print(f"Simliarity metric between graph7 & itself: {similiarity}")
     
-    # test 8: run on graph 8 twice (hopefully its zero):
-    similiarity = zero_base_compare(metric, graph_8, graph_8) 
-    print(f"Simliarity metric on graph8 on itself: {similiarity}")
+    # run on graph 8 twice (hopefully its zero):
+    similiarity = compare(metric, graph_8, graph_8, NUM_SAMPLES) 
+    print(f"Simliarity metric between graph8 & itself: {similiarity}")
     
-    # test 9: run on the graph 1 and 2:
-    similiarity = zero_base_compare(metric, graph_1, graph_2) 
-    print(f"Simliarity metric on graph1 on graph2: {similiarity}")
+    # run on graph 9 twice (hopefully its zero):
+    similiarity = compare(metric, graph_9, graph_9, NUM_SAMPLES) 
+    print(f"Simliarity metric between graph9 & itself: {similiarity}")
     
-    # test 10: run on the graph 1 and 3:
-    similiarity = zero_base_compare(metric, graph_1, graph_3) 
-    print(f"Simliarity metric on graph1 on graph3: {similiarity}")
+    # run on the graph 1 and 2:
+    similiarity = compare(metric, graph_1, graph_2, NUM_SAMPLES) 
+    print(f"Simliarity metric between graph1 & graph2: {similiarity}")
     
-    # test 11: run on the graph 2 and 3:
-    similiarity = zero_base_compare(metric, graph_2, graph_3) 
-    print(f"Simliarity metric on graph2 on graph3: {similiarity}")
+    # run on the graph 1 and 3:
+    similiarity = compare(metric, graph_1, graph_3, NUM_SAMPLES) 
+    print(f"Simliarity metric between graph1 & graph3: {similiarity}")
     
-    # test 12: run on the graph 1 and 4:
-    similiarity = zero_base_compare(metric, graph_1, graph_4) 
-    print(f"Simliarity metric on graph1 on graph4: {similiarity}")
+    # run on the graph 2 and 3:
+    similiarity = compare(metric, graph_2, graph_3, NUM_SAMPLES) 
+    print(f"Simliarity metric between graph2 & graph3: {similiarity}")
     
-    # test 13: run on the graph 1 and 5:
-    similiarity = zero_base_compare(metric, graph_1, graph_5) 
-    print(f"Simliarity metric on graph1 on graph5: {similiarity}")
+    # run on the graph 1 and 4:
+    similiarity = compare(metric, graph_1, graph_4, NUM_SAMPLES) 
+    print(f"Simliarity metric between graph1 & graph4: {similiarity}")
     
-    # test 14: run on the graph 1 and 6:
-    similiarity = zero_base_compare(metric, graph_1, graph_6) 
-    print(f"Simliarity metric on graph1 on graph6: {similiarity}")  
+    # run on the graph 1 and 5:
+    similiarity = compare(metric, graph_1, graph_5, NUM_SAMPLES) 
+    print(f"Simliarity metric between graph1 & graph5: {similiarity}")
+    
+    # run on the graph 1 and 6:
+    similiarity = compare(metric, graph_1, graph_6, NUM_SAMPLES) 
+    print(f"Simliarity metric between graph1 & graph6: {similiarity}")  
       
-    # test 15: run on the graph 1 and 7:
-    similiarity = zero_base_compare(metric, graph_1, graph_7) 
-    print(f"Simliarity metric on graph1 on graph7: {similiarity}")  
+    # run on the graph 1 and 7:
+    similiarity = compare(metric, graph_1, graph_7, NUM_SAMPLES) 
+    print(f"Simliarity metric between graph1 & graph7: {similiarity}")  
     
-    # test 16: run on the graph 1 and 8:
-    similiarity = zero_base_compare(metric, graph_1, graph_8) 
-    print(f"Simliarity metric on graph1 on graph8: {similiarity}")  
+    # run on the graph 1 and 8:
+    similiarity = compare(metric, graph_1, graph_8, NUM_SAMPLES) 
+    print(f"Simliarity metric between graph1 & graph8: {similiarity}")
+    
+    # run on the graph 1 and 9:
+    similiarity = compare(metric, graph_1, graph_9, NUM_SAMPLES) 
+    print(f"Simliarity metric between graph1 & graph9: {similiarity}")
 
 if __name__ == "__main__":
     test_stochastic_graph_similiarity_on_chemical_compounds()
