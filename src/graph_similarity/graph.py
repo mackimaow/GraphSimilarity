@@ -95,21 +95,27 @@ class Graph(tp.Generic[N, E]):
         edge_map: tp.Callable[[tp.Tuple[N, N1], tp.Tuple[N, N1], E], E1]
     ) -> "Graph[N1, E1]":
         node_transistion = tuple(map(
-            lambda x: (x, node_map(x)),
-            self.nodes
+            lambda x: (
+                x,
+                (
+                    self.__nodes[x],
+                    node_map(self.__nodes[x])
+                )
+            ),
+            self.__node_ids
         ))
         new_edges = {
             node_index_1: {
                 node_index_2: edge_map(n_1, n_2, self.__edges[node_index_1][node_index_2])
-                for (node_index_2, n_2) in enumerate(node_transistion)
+                for (node_index_2, n_2) in node_transistion
                 if node_index_1 in self.__edges and node_index_2 in self.__edges[node_index_1] 
             }
-            for (node_index_1, n_1) in enumerate(node_transistion)
+            for (node_index_1, n_1) in node_transistion
         }
         new_node_ids = set(self.__node_ids)
         new_nodes = {
             id_: new
-            for id_, (_, new) in enumerate(node_transistion)
+            for id_, (_, new) in node_transistion
         }
         return Graph(
             new_node_ids,
