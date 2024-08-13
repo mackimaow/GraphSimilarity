@@ -2,6 +2,7 @@ import typing as tp
 import random as rand
 
 from .graph import Graph
+from .graph_similarity_cache import GraphSimilarityCache
 
 
 N = tp.TypeVar("N")
@@ -17,51 +18,98 @@ class StochasticGraphSimiliarity(tp.Generic[N, E, N1, E1, MergedDisjoints, Chara
     
     def __init__(
         self,
-        initialize_nodes: tp.Callable[[int, int, N], N1],
-        initialize_edges: tp.Callable[[int, int, tp.Tuple[N, N1], tp.Tuple[N, N1], E], E1],
-        merge_node: tp.Callable[[int, int, N1, N1, E1], N1],
-        merge_edge: tp.Callable[[int, int, N1, tp.Tuple[N1, E1], tp.Tuple[N1, E1], E1, N1], E1],
-        merge_disjoint_graph_nodes: tp.Callable[[int, int, tp.List[tp.Tuple[int, N1]]], MergedDisjoints],
-        calc_characteristic: tp.Callable[[int, int, MergedDisjoints], Characteristic],
-        average_characteristic: tp.Callable[[tp.List[Characteristic]], Characteristic],
-        compare_characteristic: tp.Callable[[tp.List[Characteristic],tp.List[Characteristic]], Output],
+        initialize_nodes: tp.Callable[
+            [int, N], 
+            N1
+        ],
+        initialize_edges: tp.Callable[
+            [
+                int,
+                tp.Tuple[N, N1],
+                tp.Tuple[N, N1], 
+                E
+            ],
+            E1
+        ],
+        merge_node: tp.Callable[
+            [int, N1, N1, E1],
+            N1
+        ],
+        merge_edge: tp.Callable[
+            [
+                int,
+                N1,
+                tp.Tuple[N1, E1],
+                tp.Tuple[N1, E1],
+                E1,
+                N1
+            ],
+            E1
+        ],
+        merge_disjoint_graph_nodes: tp.Callable[
+            [
+                int,
+                tp.List[tp.Tuple[int, N1]]
+            ],
+            MergedDisjoints
+        ],
+        calc_characteristic: tp.Callable[
+            [int, MergedDisjoints],
+            Characteristic
+        ],
+        average_characteristic: tp.Callable[
+            [
+                tp.List[Characteristic],
+                tp.Optional[
+                    tp.Tuple[
+                        # old average
+                        Characteristic,
+                        # number of values in average
+                        int,    
+                    ]
+                ]
+            ],
+            Characteristic
+        ],
+        compare_characteristic: tp.Callable[
+            [
+                tp.List[Characteristic],
+                tp.List[Characteristic]
+            ],
+            Output
+        ],
         empty_graph_characteristic: Characteristic
     ):
         def wrap_initialize_nodes(
             characteristic: int,
-            number_of_characteristics: int
         ) -> tp.Callable[[N], N1]:
-            return lambda x: initialize_nodes(characteristic, number_of_characteristics, x)
+            return lambda x: initialize_nodes(characteristic, x)
         
         self.__initialize_nodes = wrap_initialize_nodes
         
         def wrap_initialize_edges(
             characteristic: int,
-            number_of_characteristics: int
         ) -> tp.Callable[[tp.Tuple[N, N1], tp.Tuple[N, N1], E], E1]:
-            return lambda x, y, z: initialize_edges(characteristic, number_of_characteristics, x, y, z)
+            return lambda x, y, z: initialize_edges(characteristic, x, y, z)
         
         self.__initialize_edges = wrap_initialize_edges
         def wrap_merge_node(
             characteristic: int,
-            number_of_characteristics: int
         ) -> tp.Callable[[N1, N1, E1], N1]:
-            return lambda x, y, z: merge_node(characteristic, number_of_characteristics, x, y, z)
+            return lambda x, y, z: merge_node(characteristic, x, y, z)
         self.__merge_node = wrap_merge_node
         def wrap_merge_edge(
             characteristic: int,
-            number_of_characteristics: int
         ) -> tp.Callable[[N1, tp.Tuple[N1, E1], tp.Tuple[N1, E1], E1, N1], E1]:
-            return lambda v, w, x, y, z: merge_edge(characteristic, number_of_characteristics, v, w, x, y, z)
+            return lambda v, w, x, y, z: merge_edge(characteristic, v, w, x, y, z)
         
         self.__merge_disjoint_graph_nodes = merge_disjoint_graph_nodes
         
         self.__merge_edge = wrap_merge_edge
         def wrap_calc_characteristic(
             characteristic: int,
-            number_of_characteristics: int
         ) -> tp.Callable[[MergedDisjoints], Characteristic]:
-            return lambda x: calc_characteristic(characteristic, number_of_characteristics, x)
+            return lambda x: calc_characteristic(characteristic, x)
         self.__calc_characteristic = wrap_calc_characteristic
         self.__average_characteristic = average_characteristic
         self.__compare_characteristic = compare_characteristic
@@ -69,23 +117,51 @@ class StochasticGraphSimiliarity(tp.Generic[N, E, N1, E1, MergedDisjoints, Chara
     
     def compare(
         self,
-        graph_1: Graph[N, E],
-        graph_2: Graph[N, E],
+        graph_1_u: tp.Union[
+            Graph[N, E],
+            tp.Tuple[
+                Graph[N, E],
+                GraphSimilarityCache[Characteristic]
+            ]
+        ],
+        graph_2_u: tp.Union[
+            Graph[N, E],
+            tp.Tuple[
+                Graph[N, E],
+                GraphSimilarityCache[Characteristic]
+            ]
+        ],
         num_samples: int = 30
+        
     ) -> Output:
+        
+        if isinstance(graph_1_u, tuple):
+            graph_1, cache_1 = graph_1_u
+        else:
+            graph_1 = graph_1_u
+            cache_1 = None
+        
+        if isinstance(graph_2_u, tuple):
+            graph_2, cache_2 = graph_2_u
+        else:
+            graph_2 = graph_2_u
+            cache_2 = None
+            
         num_characteristics = self.number_of_characteristics_needed_for_comparison(
             graph_1,
             graph_2
         )
-        average_characteristics_graph_1 = self.__compute_average_characteristics(
+        average_characteristics_graph_1 = self.compute_graph_characteristics(
             graph_1,
             num_characteristics,
-            num_samples
+            num_samples,
+            cache_1
         )
-        average_characteristics_graph_2 = self.__compute_average_characteristics(
+        average_characteristics_graph_2 = self.compute_graph_characteristics(
             graph_2,
             num_characteristics,
-            num_samples
+            num_samples,
+            cache_2
         )
         return self.__compare_characteristic(
             average_characteristics_graph_1,
@@ -124,27 +200,99 @@ class StochasticGraphSimiliarity(tp.Generic[N, E, N1, E1, MergedDisjoints, Chara
         self,
         graph: Graph[N,E],
         num_characteristics: int,
-        samples: int = 30  
+        samples: int = 30,
+        cache: tp.Optional[GraphSimilarityCache[Characteristic]] = None
     ) -> tp.List[Characteristic]:
-        return self.__compute_average_characteristics(
-            graph,
-            num_characteristics,
-            samples
-        )
+        if cache is None:
+            return self.__compute_average_characteristics(
+                graph,
+                num_characteristics,
+                samples,
+            )
+        else:
+            return self.__compute_average_characteristics_with_cache(
+                graph,
+                num_characteristics,
+                samples,
+                cache
+            )
+    
+    def create_cache(self) -> GraphSimilarityCache[Characteristic]:
+        return GraphSimilarityCache[Characteristic].new()
+    
+    def __compute_average_characteristics_with_cache(
+        self,
+        graph: Graph[N,E],
+        num_characteristics: int,
+        samples: int,
+        cache: GraphSimilarityCache[Characteristic]
+    ) -> tp.List[Characteristic]:
+        num_characteristics_in_cache = len(cache.characteristic_averages)
         
+        if (
+            cache.number_of_samples != 0 and
+            num_characteristics_in_cache < num_characteristics
+        ):
+            list_of_new_characteristics = [
+                self.__compute_characteristics(
+                    graph,
+                    range(num_characteristics_in_cache, num_characteristics)
+                )
+                for _ in range(cache.number_of_samples)
+            ]
+            characteristic_by_sample: tp.List[
+                tp.Tuple[Characteristic, ...]
+            ] = list(zip(*list_of_new_characteristics))
+            new_characteristic_averages = [
+                self.__average_characteristic(list(output), None)
+                for output in characteristic_by_sample
+            ]
+            cache.characteristic_averages.extend(new_characteristic_averages)
+
+        if cache.number_of_samples == 0:
+            cache.characteristic_averages = self.__compute_average_characteristics(
+                graph,
+                num_characteristics,
+                samples
+            )
+            cache.number_of_samples = samples
+        
+        elif cache.number_of_samples < samples:
+            list_of_characteristics = [
+                self.__compute_characteristics(
+                    graph,
+                    range(num_characteristics),
+                )
+                for _ in range(cache.number_of_samples, samples)
+            ]
+            
+            characteristic_by_sample: tp.List[
+                tp.Tuple[Characteristic, ...]
+            ] = list(zip(*list_of_characteristics))
+
+            cache.characteristic_averages = [
+                self.__average_characteristic(list(output), (old_average, cache.number_of_samples))
+                for output, old_average in zip(
+                    characteristic_by_sample,
+                    cache.characteristic_averages
+                )
+            ]
+            cache.number_of_samples = samples
+        
+        return cache.characteristic_averages
+    
     def __compute_average_characteristics(
         self,
         graph: Graph[N,E],
         num_characteristics: int,
-        samples: int
+        samples: int,
     ) -> tp.List[Characteristic]:
         list_of_characteristics = [
             self.__compute_characteristics(
                 graph,
-                num_characteristics,
-                num_characteristics
+                range(num_characteristics)
             )
-            for i in range(samples)
+            for _ in range(samples)
         ]
         
         characteristic_by_sample: tp.List[
@@ -152,35 +300,32 @@ class StochasticGraphSimiliarity(tp.Generic[N, E, N1, E1, MergedDisjoints, Chara
         ] = list(zip(*list_of_characteristics))
 
         return [
-            self.__average_characteristic(list(output))
+            self.__average_characteristic(list(output), None)
             for output in characteristic_by_sample
         ]
     
     def __compute_characteristics(
         self,
         graph: Graph[N, E],
-        num_characteristic: int,
-        number_of_characteristics: int
+        characteristic_range: range
     ) -> tp.List[Characteristic]:
         return [
             self.__compute_characteristic(
                 graph,
                 c,
-                number_of_characteristics
             )
-            for c in range(num_characteristic)
+            for c in characteristic_range
         ]
     
     def __compute_characteristic(
         self,
         graph: Graph[N, E],
         characteristic: int,
-        number_of_characteristics: int
     ) -> Characteristic:
         # augmented graph
         aug_graph = graph.map(
-            self.__initialize_nodes(characteristic, number_of_characteristics),
-            self.__initialize_edges(characteristic, number_of_characteristics)
+            self.__initialize_nodes(characteristic),
+            self.__initialize_edges(characteristic)
         )
         num_nodes = aug_graph.num_nodes()
         if num_nodes == 0:
@@ -227,16 +372,15 @@ class StochasticGraphSimiliarity(tp.Generic[N, E, N1, E1, MergedDisjoints, Chara
             aug_graph.merge(
                 node_index_1,
                 node_index_2,
-                self.__merge_node(characteristic, number_of_characteristics),
-                self.__merge_edge(characteristic, number_of_characteristics)
+                self.__merge_node(characteristic),
+                self.__merge_edge(characteristic)
             )
             del node_merge_numbers[node_index_2]
             node_merge_numbers[node_index_1] = lowest_merge_number + lowest_neighbor_merge_number
         
         merged_disjoints = self.__merge_disjoint_graph_nodes(
             characteristic,
-            number_of_characteristics,
             disjoint_nodes
         )
         
-        return self.__calc_characteristic(characteristic, number_of_characteristics)(merged_disjoints)
+        return self.__calc_characteristic(characteristic)(merged_disjoints)
