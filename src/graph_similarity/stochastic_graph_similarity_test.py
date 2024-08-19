@@ -1,15 +1,13 @@
 from enum import Enum
-import cmath
-import typing as tp
 import math
+from itertools import combinations
+import random
 
 from dataclasses import dataclass
 from graph_similarity_cache import GraphSimilarityCache
 
-from graph_similarity import Graph, StochasticGraphSimiliarity
-
-MergeAmount = int
-MergedDisjointType = complex
+from graph import Graph
+from float_graph_similiarity import FloatGraphSimilarity
 
 BOND_LENGTH = float
 
@@ -17,23 +15,6 @@ class Atom(Enum):
     OXYGEN = 8
     VANADIUM = 23
 
-CharacteristicIndex = int
-MergedCycles = int
-MergedNodes = int
-NodeMetricType = tp.Tuple[complex, MergedCycles, MergedNodes]
-EdgeMetricType = tp.Tuple[complex, MergedCycles]
-CharacteristicType = complex
-FinalOutput = float
-
-SGS = StochasticGraphSimiliarity[
-    Atom,
-    BOND_LENGTH,
-    NodeMetricType,
-    EdgeMetricType,
-    MergedDisjointType,
-    CharacteristicType,
-    FinalOutput
-]
 
 def test_stochastic_graph_similiarity_on_chemical_compounds():    
     
@@ -389,200 +370,49 @@ def test_stochastic_graph_similiarity_on_chemical_compounds():
         }
     )
     
-    
-    # ---- making similiarity metric ----
-    
-    # this is used to add extra values to the nodes that we may want as we
-    # do while doing graph reductions within the metric computation.
-    # Here we are keeping track of how many cycles and nodes were merged.
-    
-    # the golden ratio is used here to make that the multiplicative factor for each characteristic
-    # will never be the same for any two different characteristics. This is important for
-    # characteristc values to be linearly independent.
-    GOLDEN_RATIO = (1 + 5 ** 0.5) / 2
-    def _linearly_independent_multiplier(
-        characteristic: CharacteristicIndex 
-    ) -> complex:
-        return cmath.exp(
-            (cmath.pi * 2j) * (GOLDEN_RATIO * characteristic)
-        )
-    
-    def initialize_nodes(
-        characteristic: CharacteristicIndex,
-        atom: Atom
-    ) -> NodeMetricType:
-        if atom == Atom.OXYGEN:
-            return (1.0 + 0j, 1, 1)
-        else:
-            return (2.0 + 0j, 1, 1)
-    
-    # we do the same for edges
-    def initialize_edges(
-        characteristic: CharacteristicIndex,
-        node_1: tp.Tuple[Atom, NodeMetricType],
-        node_2: tp.Tuple[Atom, NodeMetricType],
-        edge: BOND_LENGTH
-    ) -> EdgeMetricType:
-        return (edge + 0j, 1)
-    
-    # now we create a function computes when two nodes merge
-    # for some characteristic function index
-    
-    def merge_nodes(
-        n: CharacteristicIndex,
-        node_1: NodeMetricType,
-        node_2: NodeMetricType,
-        edge_1_to_2: EdgeMetricType
-    ) -> NodeMetricType:
-        (value_1, merged_cycles_1, merged_nodes_1) = node_1
-        (value_2, merged_cycles_2, merged_nodes_2) = node_2
-        (edge_value, edge_cycles) = edge_1_to_2
-        
-        value_1_weight = merged_cycles_1 / (
-            merged_cycles_1 + merged_cycles_2
-        ) * _linearly_independent_multiplier(n)
-        
-        value_2_weight = merged_cycles_2 / (
-            merged_cycles_1 + merged_cycles_2
-        ) / _linearly_independent_multiplier(n)
-        
-        new_value = cmath.sqrt(
-            value_1_weight * value_1 ** 2 + value_2_weight * value_2 ** 2
-        ) + edge_value
-        
-        return (
-            new_value,
-            merged_cycles_1 + merged_cycles_2 + edge_cycles,
-            merged_nodes_1 + merged_nodes_2
-        )
-    
-    # do the same for edges
-    
-    
-    #              base node (b)                              base node (b)                               
-    #                  /\                                          .
-    #                 /  \                merge edges              |
-    #      edge_b_1  /    \  edge_b_2        --->                  |  merged edge
-    #               /      \                                       |  
-    #              /        \                                      |
-    #     node 1  .__________.  node 2                             . 
-    #             edge 1 to 2                               merged node 1 2
-    
-    def merge_edges(
-        n: CharacteristicIndex,
-        base_node: NodeMetricType,
-        base_to_1_and_edge: tp.Tuple[NodeMetricType, EdgeMetricType],
-        base_to_2_and_edge: tp.Tuple[NodeMetricType, EdgeMetricType],
-        edge_1_to_2: EdgeMetricType,
-        merged_node_1_2: NodeMetricType
-    ) -> EdgeMetricType:
-        edge_b_1 = base_to_1_and_edge[1]
-        edge_b_2 = base_to_2_and_edge[1]
-        edge_b_1_value, num_cyles_1 = edge_b_1
-        edge_b_2_value, num_cyles_2 = edge_b_2
-        
-        edge_1_weight =  _linearly_independent_multiplier(n)
-        edge_2_weight =  1.0 / _linearly_independent_multiplier(n)
-        
-        merged_edge_value = cmath.sqrt(
-            edge_b_1_value * edge_1_weight
-            + edge_b_2_value * edge_2_weight
-        )
-        
-        merged_edge = (
-            merged_edge_value,
-            num_cyles_1 + num_cyles_2
-        )
-    
-        return merged_edge
-    
-    # The case where the input graph is composed of two or more disjoint graphs,
-    # one needs to reduce the final merged node of each disjoint graph. This is 
-    # is specified by the following function: 
-    
-    # ("merge amount" is how many verticies were merged for that node)
-    def merge_disjoint_graph_nodes(
-        x: CharacteristicIndex,
-        disjoint_graph_nodes: tp.List[tp.Tuple[MergeAmount, NodeMetricType]]
-    ) -> MergedDisjointType:
-        return sum(
-            node[0]
-            for _num_merged_verticies, node in disjoint_graph_nodes
-        ) / len(disjoint_graph_nodes)
-    
-    
-    # finally after all the merging is done,
-    # we are left with 1 node of the graph which we must
-    # extract a value called the characteristic value
-    
-    def calc_characteristic(
-        x: CharacteristicIndex,
-        merged_value: MergedDisjointType
-    ) -> CharacteristicType:
-        return merged_value
-    
-    # we need to also specify how to average our characteristic values.
-    # This is easy in this example since our characteristic is just an
-    # float
-    
-    def calc_average(
-        characteristic_values: tp.List[CharacteristicType],
-        old_average: tp.Optional[tp.Tuple[CharacteristicType, int]]
-    ) -> CharacteristicType:
-        if old_average is not None:
-            return (
-                old_average[0] * old_average[1] + sum(characteristic_values)
-            ) / (
-                old_average[1] + len(characteristic_values)
-            )
-        else:
-            return sum(characteristic_values) / len(characteristic_values)
-    
-    # we need to specify how to compare two different characteristic list
-    # represent two graph respectively. Here we do a simple root mean square    
-    def compare_chars(
-        characteristic_values_graph_1: tp.List[CharacteristicType],
-        characteristic_values_graph_2: tp.List[CharacteristicType]
-    ) -> FinalOutput:
-        return abs(cmath.sqrt(sum(
-            (char_1 - char_2)**2
-            for char_1, char_2 in zip(
-                characteristic_values_graph_1,
-                characteristic_values_graph_2
-            )    
-        )))
-    
-    # some times we need to specify what a characteric value would be if the graph
-    # is empty. For this we can just put zero
-    
-    EMPTY_GRAPH_CHARACTERISTIC_VALUE = 0.0
-    
-    # now we can make our metric to use on any graph:
-    metric = StochasticGraphSimiliarity[
-        Atom,
-        BOND_LENGTH,
-        NodeMetricType,
-        EdgeMetricType,
-        MergedDisjointType,
-        CharacteristicType,
-        FinalOutput
-    ](
-        initialize_nodes,
-        initialize_edges,
-        merge_nodes,
-        merge_edges,
-        merge_disjoint_graph_nodes,
-        calc_characteristic,
-        calc_average,
-        compare_chars,
-        EMPTY_GRAPH_CHARACTERISTIC_VALUE
+    # same as graph 1 except everything is fully connected
+    graph_10 = Graph[Atom, BOND_LENGTH].create(
+        (
+            *[Atom.VANADIUM] * 4,  # 0 - 3
+            *[Atom.OXYGEN] * 14  # 4 - 17
+        ),
+        {
+            i: 1
+            for i in combinations(range(18), 2)
+        }
     )
+    
+    # same as graph 10 except everything is fully connected with random edge weights (0 - 1)
+    graph_11 = Graph[Atom, BOND_LENGTH].create(
+        (
+            *[Atom.VANADIUM] * 4,  # 0 - 3
+            *[Atom.OXYGEN] * 14  # 4 - 17
+        ),
+        {
+            i: random.random()
+            for i in combinations(range(18), 2)
+        }
+    )
+    
+    
+    # now we can make our metric to use on any graph with atoms and bond lengths:
+    metric = FloatGraphSimilarity[
+        Atom,
+        BOND_LENGTH
+    ](
+        # node to float
+        lambda node: 1 if node == Atom.OXYGEN else 2,
+        
+        # edge to float
+        lambda node_1, node_2, edge_1_to_2: edge_1_to_2,   
+    )
+    
     
     @dataclass(eq=False)
     class GraphAndCache:
         graph: Graph[Atom, BOND_LENGTH]
-        cache1: GraphSimilarityCache[CharacteristicType]
-        cache2: GraphSimilarityCache[CharacteristicType]
+        cache1: GraphSimilarityCache[complex]
+        cache2: GraphSimilarityCache[complex]
         
         @classmethod
         def create(cls, graph: Graph[Atom, BOND_LENGTH]) -> "GraphAndCache":
@@ -593,11 +423,12 @@ def test_stochastic_graph_similiarity_on_chemical_compounds():
             )
     
     def regular_compare(
-        metric: SGS,
+        metric: FloatGraphSimilarity[Atom, BOND_LENGTH],
         graph_and_cache_1: GraphAndCache,
         graph_and_cache_2: GraphAndCache,
         num_samples: int = 30,
-        use_cache: bool = True
+        use_cache: bool = True,
+        faithfullness: float = 1.0
     ) -> float:
         if use_cache:
             graph_1 = graph_and_cache_1.graph 
@@ -609,22 +440,25 @@ def test_stochastic_graph_similiarity_on_chemical_compounds():
             return metric.compare(
                 (graph_1, cache_1),
                 (graph_2, cache_2),
-                num_samples
+                num_samples,
+                faithfullness
             )
         else :
             return metric.compare(
                 graph_and_cache_1.graph,
                 graph_and_cache_2.graph,
-                num_samples
+                num_samples,
+                faithfullness
             )
     
     # gets rid of non-zero offset due to accumulated error
     def zero_base_compare(
-        metric: SGS,
+        metric: FloatGraphSimilarity[Atom, BOND_LENGTH],
         graph_and_cache_1: GraphAndCache,
         graph_and_cache_2: GraphAndCache,
         num_samples: int = 30,
-        use_cache: bool = True
+        use_cache: bool = True,
+        faithfullness: float = 1.0
     ) -> float:
         
         if use_cache:
@@ -640,17 +474,20 @@ def test_stochastic_graph_similiarity_on_chemical_compounds():
                 graph_1_on_1 = metric.compare(
                     (graph_1, cache_1_1),
                     (graph_1, cache_1_2),
-                    num_samples
+                    num_samples,
+                    faithfullness
                 )
                 graph_2_on_2 = metric.compare(
                     (graph_2, cache_2_1),
                     (graph_2, cache_2_2),
-                    num_samples
+                    num_samples,
+                    faithfullness
                 )
                 graph_1_on_2 = metric.compare(
                     (graph_1, cache_1_1),
                     (graph_2, cache_2_2),
-                    num_samples
+                    num_samples,
+                    faithfullness
                 )
             else:
                 graph_1 = graph_and_cache_1.graph 
@@ -664,17 +501,20 @@ def test_stochastic_graph_similiarity_on_chemical_compounds():
                 graph_1_on_1 = metric.compare(
                     (graph_1, cache_1_1),
                     (graph_1, cache_1_2),
-                    num_samples
+                    num_samples,
+                    faithfullness
                 )
                 graph_2_on_2 = metric.compare(
                     (graph_2, cache_2_1),
                     (graph_2, cache_2_2),
-                    num_samples
+                    num_samples,
+                    faithfullness
                 )
                 graph_1_on_2 = metric.compare(
                     (graph_1, cache_1_1),
                     (graph_2, cache_2_2),
-                    num_samples
+                    num_samples,
+                    faithfullness
                 )
         else:
             graph_1 = graph_and_cache_1.graph 
@@ -683,17 +523,20 @@ def test_stochastic_graph_similiarity_on_chemical_compounds():
             graph_1_on_1 = metric.compare(
                 graph_1,
                 graph_1,
-                num_samples
+                num_samples,
+                faithfullness
             )
             graph_2_on_2 = metric.compare(
                 graph_2,
                 graph_2,
-                num_samples
+                num_samples,
+                faithfullness
             )
             graph_1_on_2 = metric.compare(
                 graph_1,
                 graph_2,
-                num_samples
+                num_samples,
+                faithfullness
             )
         
         return math.sqrt(
@@ -701,7 +544,8 @@ def test_stochastic_graph_similiarity_on_chemical_compounds():
             + (graph_2_on_2 - graph_1_on_2) ** 2
         ) / 2
         
-    gc_0 = GraphAndCache.create(graph_0)
+    # caching is used to make the metric run faster after the first comparison using that graph
+    # gc_0 = GraphAndCache.create(graph_0)
     gc_1 = GraphAndCache.create(graph_1)
     gc_2 = GraphAndCache.create(graph_2)
     gc_3 = GraphAndCache.create(graph_3)
@@ -711,15 +555,36 @@ def test_stochastic_graph_similiarity_on_chemical_compounds():
     gc_7 = GraphAndCache.create(graph_7)
     gc_8 = GraphAndCache.create(graph_8)
     gc_9 = GraphAndCache.create(graph_9)
+    gc_10 = GraphAndCache.create(graph_10)
+    gc_11 = GraphAndCache.create(graph_11)
     
+    
+    # the number of samples dictates the convergence of the metric
+    # the more samples the more accurate the metric will be but the slower it will run (linearly)
     NUM_SAMPLES = 30
+    
+    # caching makes the metric run faster after the first comparison using that graph
     USE_CACHE = True
-    compare = lambda gc1, gc2: zero_base_compare(metric, gc1, gc2, NUM_SAMPLES, USE_CACHE)
+    
+    # Faithfullness represents how much the metric will be accurate. 
+    # Scaling this up will increase accuracy,
+    # but will also linearly increase the computation time.
+    FAITHFULLNESS: float = 0.5
+    
+    def compare(gc1: GraphAndCache, gc2: GraphAndCache) -> float:  
+        return zero_base_compare(
+            metric,
+            gc1,
+            gc2,
+            NUM_SAMPLES,
+            USE_CACHE,
+            FAITHFULLNESS
+        )
     
     print("Running tests on chemical compounds")
-    # run on graph 0 twice (hopefully its zero):
-    similiarity = compare(gc_0, gc_0) 
-    print(f"Simliarity metric between graph0 & itself: {similiarity}")
+    # # run on graph 0 twice (hopefully its zero):
+    # similiarity = compare(gc_0, gc_0) 
+    # print(f"Simliarity metric between graph0 & itself: {similiarity}")
     
     # run on graph 1 twice (hopefully its zero):
     similiarity = compare(gc_1, gc_1) 
@@ -757,6 +622,15 @@ def test_stochastic_graph_similiarity_on_chemical_compounds():
     similiarity = compare(gc_9, gc_9) 
     print(f"Simliarity metric between graph9 & itself: {similiarity}")
     
+    # run on graph 10 twice (hopefully its zero):
+    similiarity = compare(gc_10, gc_10) 
+    print(f"Simliarity metric between graph10 & itself: {similiarity}")
+    
+    # run on graph 11 twice (hopefully its zero):
+    similiarity = compare(gc_11, gc_11) 
+    print(f"Simliarity metric between graph11 & itself: {similiarity}")
+    
+    
     # run on the graph 1 and 2:
     similiarity = compare(gc_1, gc_2) 
     print(f"Simliarity metric between graph1 & graph2: {similiarity}")
@@ -792,6 +666,18 @@ def test_stochastic_graph_similiarity_on_chemical_compounds():
     # run on the graph 1 and 9:
     similiarity = compare(gc_1, gc_9) 
     print(f"Simliarity metric between graph1 & graph9: {similiarity}")
+    
+    # run on the graph 1 and 10:
+    similiarity = compare(gc_1, gc_10) 
+    print(f"Simliarity metric between graph1 & graph10: {similiarity}")
+    
+    # run on the graph 1 and 11:
+    similiarity = compare(gc_1, gc_11) 
+    print(f"Simliarity metric between graph1 & graph11: {similiarity}")\
+        
+    # run on the graph 10 and 11:
+    similiarity = compare(gc_10, gc_11) 
+    print(f"Simliarity metric between graph10 & graph11: {similiarity}")
 
 if __name__ == "__main__":
     test_stochastic_graph_similiarity_on_chemical_compounds()

@@ -1,8 +1,8 @@
 import typing as tp
 import random as rand
 
-from .graph import Graph
-from .graph_similarity_cache import GraphSimilarityCache
+from graph import Graph
+from graph_similarity_cache import GraphSimilarityCache
 
 
 N = tp.TypeVar("N")
@@ -78,7 +78,7 @@ class StochasticGraphSimiliarity(tp.Generic[N, E, N1, E1, MergedDisjoints, Chara
             ],
             Output
         ],
-        empty_graph_characteristic: Characteristic
+        empty_graph_characteristic: Characteristic,
     ):
         def wrap_initialize_nodes(
             characteristic: int,
@@ -131,8 +131,15 @@ class StochasticGraphSimiliarity(tp.Generic[N, E, N1, E1, MergedDisjoints, Chara
                 GraphSimilarityCache[Characteristic]
             ]
         ],
-        num_samples: int = 30
         
+        # This determines convergence of the algorithm, 
+        # the higher the number the more convergent the results, but at the cost of computation
+        # a good value for this is 30
+        num_samples: int = 30,
+        
+        # will ultimately determine how many characteristics are needed for comparison
+        # a higher faithfullness will have more precise results at the cost of more computation
+        faithfullness: float = 1.0
     ) -> Output:
         
         if isinstance(graph_1_u, tuple):
@@ -149,7 +156,8 @@ class StochasticGraphSimiliarity(tp.Generic[N, E, N1, E1, MergedDisjoints, Chara
             
         num_characteristics = self.number_of_characteristics_needed_for_comparison(
             graph_1,
-            graph_2
+            graph_2,
+            faithfullness
         )
         average_characteristics_graph_1 = self.compute_graph_characteristics(
             graph_1,
@@ -168,33 +176,17 @@ class StochasticGraphSimiliarity(tp.Generic[N, E, N1, E1, MergedDisjoints, Chara
             average_characteristics_graph_2
         )
     
-    def compare_characteristics(
-        self,
-        graph_1_characteristics: tp.List[Characteristic],
-        graph_2_characteristics: tp.List[Characteristic]
-    ) -> Output:
-        num_1_chars = len(graph_1_characteristics)
-        num_2_chars = len(graph_2_characteristics)
-        if num_1_chars != num_2_chars:
-            raise ValueError(
-                f'Cannot compare two graph characteristics of different lengths {num_1_chars} and {num_2_chars}.'
-            )
-
-        return self.__compare_characteristic(
-            graph_1_characteristics,
-            graph_2_characteristics
-        )
-    
     def number_of_characteristics_needed_for_comparison(
         self,
         graph_1: Graph[N,E],
         graph_2: Graph[N,E],
+        faithfullness: float = 1.0
     ) -> int:
         graph_1_size = graph_1.num_nodes()
         graph_2_size = graph_2.num_nodes()
         
-        num_characteristics = (max([graph_1_size, graph_2_size])) ** 2
-        return num_characteristics
+        num_characteristics = (max([graph_1_size, graph_2_size])) ** 2 * faithfullness
+        return round(num_characteristics)
         
     def compute_graph_characteristics(
         self,
